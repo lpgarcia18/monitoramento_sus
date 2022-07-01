@@ -7,11 +7,6 @@ setwd(getwd())
 #'mostrando os dados usados, a predição, o sumário do modelo escolhido pelo sistema (o sistema escolhe entre modelos arima
 #'e ets, o com o menor Mean Squared Error - MSE), o diagnóstico e os dados.
 #'
-#'O módulo tem como entrada um módulo, que deverá ser usado como INPUT_DADOS na sidebar (esse mode deve fazer a entrada de dados, a sua seleção
-#'e transformação em uma série temporal; e a série temporal gerada pelo módulo. Ex: módulo = modulo_cid_local; e série teporal = banco_preparado())
-#'
-#'Este módulo deve ser usado em um TABPANEL
-#'
 #######################################################################
 ##Pacotes
 #######################################################################
@@ -22,11 +17,12 @@ require(zoo)
 require(fpp2)
 require(DT)
 
+
 #######################################################################
 ##UI
 #######################################################################
 #A função UI deve entra como argumento de um tabPanel
-serie_temporal_UI <- function(id){
+serie_temporal_UI <- function(id, banco, tipo_atendimento_choice, tipo_unidade_choice, profissao_choice, sexo_choice, faixa_etaria_choice){
 	ns <- NS(id)
 	tagList(
 		fluidPage(
@@ -36,10 +32,9 @@ serie_temporal_UI <- function(id){
 					textInput(inputId = ns("lambda_banco"), 
 						  label = "Transformação de Box-Cox(lambda):",
 						  value = "NULO"),
-					helpText("Se nenhuma transformação for necessária",
-						 "não intruduzir nenhum valor.",
-						 "Lambda = NULO = sem transforação.",
-						 "Lambda = 0 = transformação Logarítimica."),
+					helpText("Se nenhuma transformação for necessária,",
+						 "manter Lambda = NULO, ou seja, sem transforação.",
+						 "Lambda = 0 produz uma transformação logarítimica."),
 					#Selecionando período de previsão
 					numericInput(inputId = ns("periodo_prev_banco"), 
 						     label = "Período desejado para previsão:",
@@ -48,6 +43,51 @@ serie_temporal_UI <- function(id){
 				),
 				# Série temporal 
 				mainPanel(
+					fluidRow(
+						column(12,
+						       column(4,
+						              #Selecionando tipo de unidade
+						              selectInput(inputId = ns("tipo_unidade_select_proj"),
+						              	    label = "Selecione o Tipo de Unidade",
+						              	    choices = tipo_unidade_choice,
+						              	    selected = "Total", 
+						              	    multiple = TRUE)
+						       ),
+						       column(4,
+						              #Selecionando Profissão
+						              selectInput(inputId = ns("profissao_select_proj"),
+						              	    label = "Selecione a Profissão",
+						              	    choices = profissao_choice,
+						              	    selected = "Total", 
+						              	    multiple = TRUE)
+						       ),
+						       column(4,
+						              #Selecionando tipo de atendimento
+						              selectInput(inputId = ns("tipo_atendimento_select_proj"),
+						              	    label = "Selecione o Tipo de Atendimento",
+						              	    choices = tipo_atendimento_choice,
+						              	    selected = "Total", 
+						              	    multiple = TRUE)
+						       ),
+						       column(4),
+						       column(4,
+						              #Selecionando sexo
+						              selectInput(inputId = ns("sexo_select_proj"),
+						              	    label = "Selecione o Sexo dos Pacientes",
+						              	    choices = sexo_choice,
+						              	    selected = "Total", 
+						              	    multiple = TRUE)
+						       ),
+						       column(4,
+						              #Selecionando faixa etaria
+						              selectInput(inputId = ns("faixa_etaria_select_proj"),
+						              	    label = "Selecione a Faixa Etaria dos Pacientes",
+						              	    choices = faixa_etaria_choice,
+						              	    selected = "Total", 
+						              	    multiple = TRUE)
+						       )
+						)
+					),
 					tabsetPanel(type = "tabs",
 						    #Gráfico da série temporal
 						    tabPanel("Previsão", plotOutput(outputId = ns("serie_banco"), width = "100%", height = 330),
@@ -74,29 +114,30 @@ serie_temporal_SERV <- function(id, banco){
 		function(input, output, session)
 		{
 			
-			banco_tipo_unidade <- reactive({
+			banco_preparado_proj <- reactive({
 				
 				producao_select  <- banco  %>%
-					subset(banco$tipo_unidade == "UPA")
+					subset(banco$tipo_atendimento %in% input$tipo_atendimento_select_proj &
+					       	banco$tipo_unidade %in% input$tipo_unidade_select_proj &
+					       	banco$profissao %in% input$profissao_select_proj &
+					       	banco$sexo %in% input$sexo_select_proj &
+					       	banco$faixa_etaria %in% input$faixa_etaria_select_proj 
+					)
 				producao_select
 			})
-	
-	
-			banco_preparado <- reactive({
-				banco_tipo_unidade() %>% 
-					dplyr::select("quantidade", "dt_atendimento")
-			})
+			
 			
 			inicio <- reactive({
-				a <- banco_preparado()$dt_atendimento
-				a <- substr(a,0,4)
-				a <- as.numeric(a)
+				a <- banco_preparado_proj()$dt_atendimento
 				a <- min(a)
 				a
 			})
 			
 			banco_pre <- reactive({         
-				banco_prep <- banco_preparado()$quantidade 
+				banco_prep <- banco_preparado_proj() %>%
+					dplyr::group_by(dt_atendimento) %>%
+					dplyr::summarise(quantidade = sum(quantidade, na.rm = T))
+				banco_prep <- banco_prep$quantidade
 				banco_prep <- ts(banco_prep[-1],start = inicio(), frequency = 12)
 				banco_prep 
 			})        
@@ -144,7 +185,7 @@ serie_temporal_SERV <- function(id, banco){
 				
 				ifelse(g > h, fit_banco <- funcets , fit_banco <- funcarima)
 				"Intervalo de Confiança"
-				forecast(fit_banco, periodo_prev_banco(), level = c(50,80,95))
+				forecast(fit_banco, periodo_prev_banco(), level = c(80,95))
 			})
 			
 			#Gráfico com previsão
@@ -188,19 +229,49 @@ serie_temporal_SERV <- function(id, banco){
 			
 			#Tabela de Dados
 			
+			output$dados_real <- DT::renderDataTable({
+				      tabela_real <- banco_preparado_proj() %>%
+				      	dplyr::select(
+				      		tipo_unidade,
+				      		profissao,
+				      		tipo_atendimento,
+				      		sexo,
+				      		faixa_etaria,
+				      		dt_atendimento,
+				      		quantidade
+				      	)
+				      
+				      names(tabela_real) <- c(
+				      			"Tipo de Unidade",
+				      			"Profissão",
+				      			"Tipo de Atendimento",
+				      			"Sexo",
+				      			"Faixa Etária",
+				      			"Mês de Atendimento",
+				      			"Número de Atendimentos"
+				      			)
+				      tabela_real
+			}, extensions = 'Buttons',
+			options = list(
+				"dom" = 'T<"clear">lBfrtip',
+				buttons = list('copy', 'csv','excel', 'pdf', 'print'),
+				pageLength = 100,
+				searching = FALSE))
+			
+			
 			dados_fim <- reactive({
 				VALOR <- as.data.frame(banco_prev())
 			})
 			
 			
-			
 			output$dados_prev <- DT::renderDataTable({
-				DT::datatable(dados_fim(),
-					      rownames = FALSE,
-					      editable = FALSE,
-					      options = list(lengthMenu = c(10,20, 40, 60, 80, 100), pageLength = 20))
-			})
-			
+				dados_fim()
+				}, extensions = 'Buttons',
+				options = list(
+					"dom" = 'T<"clear">lBfrtip',
+					buttons = list('copy', 'csv','excel', 'pdf', 'print'),
+					pageLength = 100,
+					searching = FALSE))
 			
 			
 		})
