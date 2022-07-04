@@ -138,7 +138,7 @@ serie_temporal_SERV <- function(id, banco){
 					dplyr::group_by(dt_atendimento) %>%
 					dplyr::summarise(quantidade = sum(quantidade, na.rm = T))
 				banco_prep <- banco_prep$quantidade
-				banco_prep <- ts(banco_prep[-1],start = inicio(), frequency = 12)
+				banco_prep <- ts(banco_prep, start = c(as.numeric(format(inicio(), format = "%Y")), as.numeric(format(inicio(), format = "%m"))), frequency = 12)
 				banco_prep 
 			})        
 			
@@ -230,27 +230,27 @@ serie_temporal_SERV <- function(id, banco){
 			#Tabela de Dados
 			
 			output$dados_real <- DT::renderDataTable({
-				      tabela_real <- banco_preparado_proj() %>%
-				      	dplyr::select(
-				      		tipo_unidade,
-				      		profissao,
-				      		tipo_atendimento,
-				      		sexo,
-				      		faixa_etaria,
-				      		dt_atendimento,
-				      		quantidade
-				      	)
-				      
-				      names(tabela_real) <- c(
-				      			"Tipo de Unidade",
-				      			"Profissão",
-				      			"Tipo de Atendimento",
-				      			"Sexo",
-				      			"Faixa Etária",
-				      			"Mês de Atendimento",
-				      			"Número de Atendimentos"
-				      			)
-				      tabela_real
+				tabela_real <- banco_preparado_proj() %>%
+					dplyr::select(
+						tipo_unidade,
+						profissao,
+						tipo_atendimento,
+						sexo,
+						faixa_etaria,
+						dt_atendimento,
+						quantidade
+					)
+				
+				names(tabela_real) <- c(
+					"Tipo de Unidade",
+					"Profissão",
+					"Tipo de Atendimento",
+					"Sexo",
+					"Faixa Etária",
+					"Mês de Atendimento",
+					"Número de Atendimentos"
+				)
+				tabela_real
 			}, extensions = 'Buttons',
 			options = list(
 				"dom" = 'T<"clear">lBfrtip',
@@ -266,14 +266,13 @@ serie_temporal_SERV <- function(id, banco){
 			
 			output$dados_prev <- DT::renderDataTable({
 				dados_fim()
-				}, extensions = 'Buttons',
-				options = list(
-					"dom" = 'T<"clear">lBfrtip',
-					buttons = list('copy', 'csv','excel', 'pdf', 'print'),
-					pageLength = 100,
-					searching = FALSE))
+			}, extensions = 'Buttons',
+			options = list(
+				"dom" = 'T<"clear">lBfrtip',
+				buttons = list('copy', 'csv','excel', 'pdf', 'print'),
+				pageLength = 100,
+				searching = FALSE))
 			
 			
 		})
 }
-		
